@@ -2,23 +2,8 @@
 // 1. STATE DATA & INITIALIZATION
 // ==========================================
 
-// Ambil data dari localStorage, jika kosong gunakan data dummy awal
-let tasks = JSON.parse(localStorage.getItem('tasks')) || [
-  {
-    id: 1,
-    judul: 'Lab 10 event delegation',
-    matkul: 'Pemrograman Web',
-    deadline: '2026-10-08',
-    selesai: false
-  },
-  {
-    id: 2,
-    judul: 'ERD sistem perpustakaan',
-    matkul: 'Basis Data',
-    deadline: '2026-10-12',
-    selesai: true
-  }
-];
+// Inisialisasi data tugas
+let tasks = [];
 
 let currentFilter = 'semua';
 
@@ -75,7 +60,7 @@ function render() {
   if (filteredTasks.length === 0) {
     const emptyLi = document.createElement('li');
     emptyLi.className = 'empty-state';
-    emptyLi.textContent = 'Belum ada tugas yang ditambahkan.';
+    emptyLi.textContent = 'Belum ada tugas';
     taskList.appendChild(emptyLi);
     return;
   }
@@ -209,5 +194,48 @@ filterButtons.forEach(button => {
   });
 });
 
-// Render awal saat aplikasi dimuat
-render();
+// ==========================================
+// 6. PENGAMBILAN DATA DARI SERVER (GET /api/tugas)
+// ==========================================
+
+async function fetchTasks() {
+  // 1. State Loading: Sebelum dan selama data diambil
+  taskList.innerHTML = '<li class="empty-state">Memuat...</li>';
+
+  try {
+    const response = await fetch('/api/tugas');
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // 2. State Berhasil (Ada Data) vs 3. State Kosong
+    if (Array.isArray(data) && data.length > 0) {
+      tasks = data;
+      render();
+    } else {
+      tasks = [];
+      taskList.innerHTML = '<li class="empty-state">Belum ada tugas</li>';
+      taskCounter.textContent = '0 tugas aktif';
+    }
+  } catch (error) {
+    // 4. State Error: Gagal koneksi atau server error
+    taskList.innerHTML = `
+      <li class="empty-state">
+        <p>Gagal memuat tugas.</p>
+        <button type="button" id="btn-retry" class="btn-retry">Coba Lagi</button>
+      </li>
+    `;
+    taskCounter.textContent = '0 tugas aktif';
+
+    const retryBtn = document.getElementById('btn-retry');
+    if (retryBtn) {
+      retryBtn.addEventListener('click', fetchTasks);
+    }
+  }
+}
+
+// Inisialisasi: panggil fungsi saat web pertama kali diakses
+fetchTasks();
