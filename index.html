@@ -3,19 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Task Tracker Kuliah</title>
-    <!-- Tag penghubung ke file CSS -->
+    <title>Task Tracker Kuliah v2</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <!-- Container Utama -->
     <div class="container">
         
         <!-- Header Aplikasi -->
         <header class="app-header">
             <span class="app-icon">📋</span>
-            <h1>Task Tracker Kuliah</h1>
+            <h1>Task Tracker Kuliah <small>v2 · REST API</small></h1>
         </header>
 
         <!-- Form Tambah Tugas -->
@@ -32,10 +30,8 @@
             <div class="form-row">
                 <div class="select-wrapper">
                     <select id="task-matkul">
-                        <option value="Pemrograman Web">Pemrograman Web</option>
-                        <option value="Basis Data">Basis Data</option>
-                        <option value="Algoritma">Algoritma</option>
-                        <option value="Jaringan Komputer">Jaringan Komputer</option>
+                        <!-- Opsi diisi dinamis via GET /api/matkul -->
+                        <option value="">Memuat matkul...</option>
                     </select>
                 </div>
                 <div class="date-wrapper">
@@ -47,6 +43,11 @@
             <!-- Area Pesan Error -->
             <div id="error-message" class="error-message hidden"></div>
         </form>
+
+        <!-- Fitur Pencarian (Bonus Debounce) -->
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="🔍 Cari tugas..." autocomplete="off">
+        </div>
 
         <!-- Filter & Counter Bar -->
         <div class="filter-bar">
@@ -60,12 +61,13 @@
 
         <!-- Daftar Tugas -->
         <ul id="task-list" class="task-list">
-            <li class="empty-state">Belum ada tugas yang ditambahkan.</li>
+            <li class="empty-state">Memuat tugas...</li>
         </ul>
 
     </div>
 
-    <!-- Script dimuat dengan defer -->
+    <!-- PENTING: Muat mock-api.js sebelum app.js -->
+    <script src="mock-api.js"></script>
     <script src="app.js" defer></script>
 </body>
 </html>

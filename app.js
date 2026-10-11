@@ -1,13 +1,39 @@
 // ==========================================
-// 1. STATE DATA & INITIALIZATION
+// 1. HELPER API (POIN 01 & 04)
 // ==========================================
 
-// Inisialisasi data tugas
+/**
+ * Wrapper fungsi fetch() yang mengecek res.ok dan melempar Error jika server gagal
+ */
+async function api(url, options = {}) {
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    const message = errorData.message || errorData.error || `HTTP Error ${response.status}`;
+    throw new Error(message);
+  }
+
+  // 204 No Content (DELETE)
+  if (response.status === 204) return null;
+
+  return response.json();
+}
+
+// ==========================================
+// 2. STATE DATA & DOM ELEMENTS
+// ==========================================
+
 let tasks = [];
-
 let currentFilter = 'semua';
+let searchQuery = '';
 
-// DOM Elements
 const taskForm = document.getElementById('task-form');
 const taskTitleInput = document.getElementById('task-title');
 const taskMatkulSelect = document.getElementById('task-matkul');
@@ -16,13 +42,10 @@ const errorMessage = document.getElementById('error-message');
 const taskList = document.getElementById('task-list');
 const taskCounter = document.getElementById('task-counter');
 const filterButtons = document.querySelectorAll('.filter-btn');
+const searchInput = document.getElementById('search-input');
+const submitBtn = taskForm.querySelector('button[type="submit"]');
 
-// Helper LocalStorage
-function saveToLocalStorage() {
-  localStorage.setItem('tasks', JSON.stringify(tasks));
-}
-
-// Helper Pesan Error
+// Helper Pesan Error UI Form
 function showError(message) {
   errorMessage.textContent = message;
   errorMessage.classList.remove('hidden');
@@ -33,198 +56,94 @@ function hideError() {
   errorMessage.classList.add('hidden');
 }
 
-
 // ==========================================
-// 2. FUNGSI RENDER UTAMA
+// 3. FUNGSI RENDER UI
 // ==========================================
 
 function render() {
-  // A. Bersihkan elemen list
   taskList.innerHTML = '';
 
-  // B. Sorting berdasarkan deadline terdekat (Bonus)
-  const sortedTasks = [...tasks].sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+  // Filter berdasarkan status & kata kunci pencarian
+  const filteredTasks = tasks.filter(task => {
+    const matchesFilter =
+      currentFilter === 'semua' ||
+      (currentFilter === 'aktif' && !task.selesai) ||
+      (currentFilter === 'selesai' && task.selesai);
 
-  // C. Filter data sesuai status filter saat ini
-  const filteredTasks = sortedTasks.filter(task => {
-    if (currentFilter === 'aktif') return !task.selesai;
-    if (currentFilter === 'selesai') return task.selesai;
-    return true; // 'semua'
+    const matchesSearch = task.judul.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          task.matkul.toLowerCase().includes(searchQuery.toLowerCase());
+
+    return matchesFilter && matchesSearch;
   });
 
-  // D. Update counter tugas aktif
-  const activeCount = tasks.filter(task => !task.selesai).length;
+  // Urutkan berdasarkan deadline terdekat
+  filteredTasks.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+
+  // Update Counter
+  const activeCount = tasks.filter(t => !t.selesai).length;
   taskCounter.textContent = `${activeCount} tugas aktif`;
 
-  // E. Tampilkan empty state jika daftar kosong
+  // State Kosong
   if (filteredTasks.length === 0) {
-    const emptyLi = document.createElement('li');
-    emptyLi.className = 'empty-state';
-    emptyLi.textContent = 'Belum ada tugas';
-    taskList.appendChild(emptyLi);
+    taskList.innerHTML = '<li class="empty-state">Belum ada tugas yang sesuai.</li>';
     return;
   }
 
-  // F. Render setiap elemen item tugas
+  // Render Daftar Tugas
   filteredTasks.forEach(task => {
     const li = document.createElement('li');
     li.className = `task-item ${task.selesai ? 'completed' : ''}`;
     li.dataset.id = task.id;
 
-    const infoDiv = document.createElement('div');
-    infoDiv.className = 'task-info';
+    li.innerHTML = `
+      <div class="task-info">
+        <input type="checkbox" class="task-checkbox" ${task.selesai ? 'checked' : ''}>
+        <div class="task-details">
+          <span class="task-title-text"></span>
+          <span class="task-meta">${task.matkul} · deadline ${task.deadline}</span>
+        </div>
+      </div>
+      <button type="button" class="btn-delete">✕</button>
+    `;
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.className = 'task-checkbox';
-    checkbox.checked = task.selesai;
-
-    const detailsDiv = document.createElement('div');
-    detailsDiv.className = 'task-details';
-
-    // XSS Protection: Menggunakan textContent
-    const titleSpan = document.createElement('span');
-    titleSpan.className = 'task-title-text';
-    titleSpan.textContent = task.judul;
-
-    const metaSpan = document.createElement('span');
-    metaSpan.className = 'task-meta';
-    metaSpan.textContent = `${task.matkul} · deadline ${task.deadline}`;
-
-    detailsDiv.appendChild(titleSpan);
-    detailsDiv.appendChild(metaSpan);
-
-    infoDiv.appendChild(checkbox);
-    infoDiv.appendChild(detailsDiv);
-
-    const deleteBtn = document.createElement('button');
-    deleteBtn.type = 'button';
-    deleteBtn.className = 'btn-delete';
-    deleteBtn.textContent = '✕';
-
-    li.appendChild(infoDiv);
-    li.appendChild(deleteBtn);
+    // Proteksi XSS
+    li.querySelector('.task-title-text').textContent = task.judul;
 
     taskList.appendChild(li);
   });
 }
 
-
 // ==========================================
-// 3. FORM TAMBAH TUGAS & VALIDASI
+// 4. PEMUATAN DATA PARALEL (POIN 01, 02 & 05)
 // ==========================================
 
-taskForm.addEventListener('submit', function (e) {
-  e.preventDefault();
-
-  const judul = taskTitleInput.value.trim();
-  const matkul = taskMatkulSelect.value;
-  const deadline = taskDeadlineInput.value;
-
-  if (judul.length < 3) {
-    showError('Judul tugas minimal harus 3 karakter.');
-    return;
-  }
-
-  if (!deadline) {
-    showError('Tanggal deadline wajib diisi.');
-    return;
-  }
-
+async function loadInitialData() {
+  // State Loading
+  taskList.innerHTML = '<li class="empty-state">Memuat tugas...</li>';
   hideError();
 
-  const newTask = {
-    id: Date.now(),
-    judul: judul,
-    matkul: matkul,
-    deadline: deadline,
-    selesai: false
-  };
-
-  tasks.push(newTask);
-  saveToLocalStorage();
-
-  taskForm.reset();
-  render();
-});
-
-
-// ==========================================
-// 4. EVENT DELEGATION PADA <ul>
-// ==========================================
-
-taskList.addEventListener('click', function (e) {
-  const li = e.target.closest('li');
-  if (!li || !li.dataset.id) return;
-
-  const taskId = Number(li.dataset.id);
-
-  // Toggle Checkbox Selesai
-  if (e.target.classList.contains('task-checkbox')) {
-    const task = tasks.find(t => t.id === taskId);
-    if (task) {
-      task.selesai = e.target.checked;
-      saveToLocalStorage();
-      render();
-    }
-  }
-
-  // Tombol Hapus
-  if (e.target.classList.contains('btn-delete')) {
-    tasks = tasks.filter(t => t.id !== taskId);
-    saveToLocalStorage();
-    render();
-  }
-});
-
-
-// ==========================================
-// 5. FILTER TUGAS & FINALISASI
-// ==========================================
-
-filterButtons.forEach(button => {
-  button.addEventListener('click', function () {
-    // Pindahkan class 'on' ke tombol yang baru diklik
-    filterButtons.forEach(btn => btn.classList.remove('on'));
-    this.classList.add('on');
-
-    // Update state filter dan panggil render ulang
-    currentFilter = this.dataset.filter;
-    render();
-  });
-});
-
-// ==========================================
-// 6. PENGAMBILAN DATA DARI SERVER (GET /api/tugas)
-// ==========================================
-
-async function fetchTasks() {
-  // 1. State Loading: Sebelum dan selama data diambil
-  taskList.innerHTML = '<li class="empty-state">Memuat...</li>';
-
   try {
-    const response = await fetch('/api/tugas');
+    // Promise.all untuk mengambil tugas & daftar mata kuliah secara bersamaan
+    const [dataTugas, dataMatkul] = await Promise.all([
+      api('/api/tugas'),
+      api('/api/matkul')
+    ]);
 
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+    // Opsi Mata Kuliah Dinamis
+    if (Array.isArray(dataMatkul) && dataMatkul.length > 0) {
+      taskMatkulSelect.innerHTML = dataMatkul
+        .map(m => `<option value="${m}">${m}</option>`)
+        .join('');
     }
 
-    const data = await response.json();
+    tasks = Array.isArray(dataTugas) ? dataTugas : [];
+    render();
 
-    // 2. State Berhasil (Ada Data) vs 3. State Kosong
-    if (Array.isArray(data) && data.length > 0) {
-      tasks = data;
-      render();
-    } else {
-      tasks = [];
-      taskList.innerHTML = '<li class="empty-state">Belum ada tugas</li>';
-      taskCounter.textContent = '0 tugas aktif';
-    }
   } catch (error) {
-    // 4. State Error: Gagal koneksi atau server error
+    // State Error + Tombol Coba Lagi
     taskList.innerHTML = `
       <li class="empty-state">
-        <p>Gagal memuat tugas.</p>
+        <p>Gagal memuat data dari server.</p>
         <button type="button" id="btn-retry" class="btn-retry">Coba Lagi</button>
       </li>
     `;
@@ -232,10 +151,125 @@ async function fetchTasks() {
 
     const retryBtn = document.getElementById('btn-retry');
     if (retryBtn) {
-      retryBtn.addEventListener('click', fetchTasks);
+      retryBtn.addEventListener('click', loadInitialData);
     }
   }
 }
 
-// Inisialisasi: panggil fungsi saat web pertama kali diakses
-fetchTasks();
+// ==========================================
+// 5. FORM TAMBAH TUGAS - POST (POIN 02 & 03)
+// ==========================================
+
+taskForm.addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  const judul = taskTitleInput.value.trim();
+  const matkul = taskMatkulSelect.value;
+  const deadline = taskDeadlineInput.value;
+
+  hideError();
+
+  // Nonaktifkan tombol selama pengiriman
+  submitBtn.disabled = true;
+
+  try {
+    const newTask = await api('/api/tugas', {
+      method: 'POST',
+      body: JSON.stringify({ judul, matkul, deadline })
+    });
+
+    tasks.push(newTask);
+    taskForm.reset();
+    render();
+  } catch (error) {
+    // Tampilkan pesan error dari server (seperti 400 Bad Request)
+    showError(error.message);
+  } finally {
+    submitBtn.disabled = false;
+  }
+});
+
+// ==========================================
+// 6. EVENT DELEGATION - PATCH & DELETE (POIN 03 & 06)
+// ==========================================
+
+taskList.addEventListener('click', async function (e) {
+  const li = e.target.closest('li');
+  if (!li || !li.dataset.id) return;
+
+  const taskId = Number(li.dataset.id);
+  const taskIndex = tasks.findIndex(t => t.id === taskId);
+  if (taskIndex === -1) return;
+
+  // A. PATCH Selesai (dengan Optimistic Update)
+  if (e.target.classList.contains('task-checkbox')) {
+    const previousStatus = tasks[taskIndex].selesai;
+    const newStatus = e.target.checked;
+
+    // 1. Optimistic Update (Ubah UI Dulu)
+    tasks[taskIndex].selesai = newStatus;
+    render();
+
+    try {
+      await api(`/api/tugas/${taskId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ selesai: newStatus })
+      });
+    } catch (error) {
+      // Rollback jika server gagal
+      tasks[taskIndex].selesai = previousStatus;
+      render();
+      showError(`Gagal memperbarui status: ${error.message}`);
+    }
+  }
+
+  // B. DELETE Hapus (dengan Optimistic Update)
+  if (e.target.classList.contains('btn-delete')) {
+    const originalTasks = [...tasks];
+
+    // 1. Optimistic Update (Hapus dari UI Dulu)
+    tasks = tasks.filter(t => t.id !== taskId);
+    render();
+
+    try {
+      await api(`/api/tugas/${taskId}`, { method: 'DELETE' });
+    } catch (error) {
+      // Rollback jika server gagal
+      tasks = originalTasks;
+      render();
+      showError(`Gagal menghapus tugas: ${error.message}`);
+    }
+  }
+});
+
+// ==========================================
+// 7. DEBOUNCE SEARCH & FILTER (BONUS 06)
+// ==========================================
+
+// Helper Debounce
+function debounce(func, delay) {
+  let timeout;
+  return function (...args) {
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(this, args), delay);
+  };
+}
+
+if (searchInput) {
+  searchInput.addEventListener('input', debounce(function (e) {
+    searchQuery = e.target.value.trim();
+    render();
+  }, 300));
+}
+
+filterButtons.forEach(button => {
+  button.addEventListener('click', function () {
+    filterButtons.forEach(btn => btn.classList.remove('on'));
+    this.classList.add('on');
+    currentFilter = this.dataset.filter;
+    render();
+  });
+});
+
+// Inisialisasi Aplikasi saat halaman dimuat
+loadInitialData();
