@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Tracker Kuliah</title>
+    <!-- Tag penghubung ke file CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Container Utama -->
+    <div class="container">
+        
+        <!-- Header Aplikasi -->
+        <header class="app-header">
+            <span class="app-icon">📋</span>
+            <h1>Task Tracker Kuliah</h1>
+        </header>
+
+        <!-- Form Tambah Tugas -->
+        <form id="task-form" class="task-form">
+            <div class="input-group">
+                <input 
+                    type="text" 
+                    id="task-title" 
+                    placeholder="Judul tugas (min. 3 karakter)" 
+                    autocomplete="off"
+                >
+            </div>
+            
+            <div class="form-row">
+                <div class="select-wrapper">
+                    <select id="task-matkul">
+                        <option value="Pemrograman Web">Pemrograman Web</option>
+                        <option value="Basis Data">Basis Data</option>
+                        <option value="Algoritma">Algoritma</option>
+                        <option value="Jaringan Komputer">Jaringan Komputer</option>
+                    </select>
+                </div>
+                <div class="date-wrapper">
+                    <input type="date" id="task-deadline">
+                </div>
+                <button type="submit" class="btn-submit">Tambah</button>
+            </div>
+            
+            <!-- Area Pesan Error -->
+            <div id="error-message" class="error-message hidden"></div>
+        </form>
+
+        <!-- Filter & Counter Bar -->
+        <div class="filter-bar">
+            <div class="filters">
+                <button type="button" class="filter-btn on" data-filter="semua">Semua</button>
+                <button type="button" class="filter-btn" data-filter="aktif">Aktif</button>
+                <button type="button" class="filter-btn" data-filter="selesai">Selesai</button>
+            </div>
+            <div id="task-counter" class="task-counter">0 tugas aktif</div>
+        </div>
+
+        <!-- Daftar Tugas -->
+        <ul id="task-list" class="task-list">
+            <li class="empty-state">Belum ada tugas yang ditambahkan.</li>
+        </ul>
+
+    </div>
+
+    <!-- Script dimuat dengan defer -->
+    <script src="app.js" defer></script>
+</body>
+</html>
